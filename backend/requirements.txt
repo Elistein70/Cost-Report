@@ -1,0 +1,17 @@
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.9
+pandas==2.1.4
+openpyxl==3.1.2
+pdfplumber==0.10.3
+xlrd==2.0.1
+python-dotenv==1.0.0
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+pydantic==2.5.3
+pydantic-settings==2.1.0
+aiofiles==23.2.1
+rapidfuzz==3.6.1
+numpy==1.26.3
+xlsxwriter==3.1.9
+PyPDF2==3.0.1
