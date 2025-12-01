@@ -14,6 +14,7 @@ class VisitProcessor:
         self.data = None
         self.tagged_data = None
         self.flagged_items = []
+        self.questions = []  # Questions for clarification
 
         # PMPM codes (delete Unique Patient/Visit/Hours per SOP 3.1)
         self.pmpm_codes = [
@@ -168,11 +169,23 @@ class VisitProcessor:
 
         return 'Unknown', 0.5
 
-    def save_to_excel(self, output_path: str):
-        """Save tagged data to Excel"""
-        if self.tagged_data is not None:
-            self.tagged_data.to_excel(
-                output_path,
-                sheet_name='Detail Data 5 Tagging',
-                index=False
-            )
+    def save_to_template(self, template_path: str, output_path: str):
+        """Save tagged data to actual template"""
+        from openpyxl import load_workbook
+
+        if self.tagged_data is None:
+            return
+
+        wb = load_workbook(output_path, keep_vba=True)
+
+        # Write to Detail Data 5 Tagging sheet
+        if 'Detail Data 5 Tagging' in wb.sheetnames:
+            ws = wb['Detail Data 5 Tagging']
+            # Write tagged visit data
+            # Customize based on template 21-column structure
+
+        wb.save(output_path)
+
+    def get_questions(self) -> List[str]:
+        """Return list of questions for user clarification"""
+        return list(set(self.questions))

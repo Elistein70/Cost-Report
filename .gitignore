@@ -52,3 +52,6 @@ logs/
 # Reports (generated)
 reports/
 output/
+
+# Streamlit
+.streamlit/secrets.toml

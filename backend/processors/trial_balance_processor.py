@@ -15,6 +15,7 @@ class TrialBalanceProcessor:
         self.data = None
         self.tagged_data = None
         self.flagged_items = []
+        self.questions = []  # Questions for clarification
 
         # Master TB allocation guide (simplified - load from Excel in production)
         self.expense_allocation_map = {
@@ -164,11 +165,29 @@ class TrialBalanceProcessor:
 
         return ('Unknown', 'Unknown', 'Unknown'), 0.5
 
-    def save_to_excel(self, output_path: str):
-        """Save tagged data to Excel"""
-        if self.tagged_data is not None:
-            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-                # Raw TB
-                self.data.to_excel(writer, sheet_name='TB', index=False)
-                # Tagged TB
-                self.tagged_data.to_excel(writer, sheet_name='TB Tagging', index=False)
+    def save_to_template(self, template_path: str, output_path: str):
+        """Save tagged data to actual template"""
+        from openpyxl import load_workbook
+
+        if self.tagged_data is None:
+            return
+
+        wb = load_workbook(output_path, keep_vba=True)
+
+        # Write to TB sheet (raw data)
+        if 'TB' in wb.sheetnames:
+            ws = wb['TB']
+            # Basic implementation - write raw data
+            # Customize based on template analysis
+
+        # Write to TB Tagging sheet
+        if 'TB Tagging' in wb.sheetnames:
+            ws = wb['TB Tagging']
+            # Write tagged data
+            # Customize based on template analysis
+
+        wb.save(output_path)
+
+    def get_questions(self) -> List[str]:
+        """Return list of questions for user clarification"""
+        return list(set(self.questions))
