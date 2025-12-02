@@ -52,9 +52,10 @@ class VisitProcessor:
         return self.flagged_items
 
     def _load_file(self) -> pd.DataFrame:
-        """Load visit data file"""
+        """Load visit data file - only reads 'Detail Data' tab from Excel"""
         if self.file_path.suffix.lower() in ['.xlsx', '.xls']:
-            df = pd.read_excel(self.file_path)
+            # Only read from 'Detail Data' sheet
+            df = pd.read_excel(self.file_path, sheet_name='Detail Data', engine='openpyxl')
         else:
             df = pd.read_csv(self.file_path)
 
