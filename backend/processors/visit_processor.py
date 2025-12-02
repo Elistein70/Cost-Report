@@ -29,13 +29,18 @@ class VisitProcessor:
         # Live-In codes (apply x13 rule)
         self.live_in_keywords = ['live-in', 'live in', 'livein']
 
-        # Program type patterns
+        # Program type patterns (expanded for better matching)
         self.program_patterns = {
-            'HHA': ['hha', 'home health aide', 'aide'],
-            'CDPAP': ['cdpap', 'consumer directed'],
-            'Nursing': ['rn', 'lpn', 'nurse', 'nursing'],
-            'NHTD': ['nhtd'],
-            'TBI': ['tbi'],
+            'HHA': ['hha', 'home health aide', 'aide', 'personal care', 'homemaker',
+                   'home care', 'attendant', 'caregiver'],
+            'CDPAP': ['cdpap', 'consumer directed', 'consumer-directed', 'cd-pap',
+                     'personal assistant', 'pa services'],
+            'Nursing': ['rn', 'lpn', 'nurse', 'nursing', 'registered nurse',
+                       'licensed practical', 'skilled nursing', 'sn visit'],
+            'NHTD': ['nhtd', 'nursing home transition'],
+            'TBI': ['tbi', 'traumatic brain injury'],
+            'Therapy': ['pt', 'ot', 'st', 'physical therapy', 'occupational therapy',
+                       'speech therapy', 'therapist'],
         }
 
     def process(self) -> List[Dict[str, Any]]:
@@ -165,8 +170,21 @@ class VisitProcessor:
         df['Confidence'] = 0.0
 
         for idx, row in df.iterrows():
-            description = str(row.get('Service Description', ''))
-            billing_code = str(row.get('Billing Code', ''))
+            # Try multiple column possibilities for description
+            description = ''
+            for col in ['Service Description', 'Description', 'Service', 'Service_Description',
+                       'Service Type', 'ServiceDescription', 'Service_Type']:
+                if col in row and pd.notna(row[col]):
+                    description = str(row[col])
+                    break
+
+            # Try multiple column possibilities for billing code
+            billing_code = ''
+            for col in ['Billing Code', 'Code', 'Service Code', 'Billing_Code',
+                       'BillingCode', 'Service_Code']:
+                if col in row and pd.notna(row[col]):
+                    billing_code = str(row[col])
+                    break
 
             # Determine program type
             program_type, confidence = self._tag_program_type(description, billing_code)
@@ -175,7 +193,7 @@ class VisitProcessor:
             df.at[idx, 'Confidence'] = confidence
 
             # Determine service category
-            if any(keyword in description.lower() for keyword in self.live_in_keywords):
+            if description and any(keyword in description.lower() for keyword in self.live_in_keywords):
                 df.at[idx, 'Service_Category'] = 'Live-In'
             elif program_type == 'Nursing':
                 df.at[idx, 'Service_Category'] = 'Nursing Visit'
@@ -185,7 +203,7 @@ class VisitProcessor:
             # Flag if confidence is low
             if confidence < settings.CONFIDENCE_THRESHOLD:
                 self.flagged_items.append({
-                    'original_value': description,
+                    'original_value': description if description else billing_code,
                     'suggested_tag': program_type,
                     'confidence': confidence,
                     'row_number': idx + 2
@@ -195,24 +213,38 @@ class VisitProcessor:
 
     def _tag_program_type(self, description: str, billing_code: str) -> tuple:
         """Tag program type based on description and code"""
-        if not description:
-            return 'Unknown', 0.5
+        # If we have description, try to match it
+        if description and description.lower() not in ['nan', 'none', '']:
+            description_lower = description.lower().strip()
 
-        description_lower = description.lower()
+            # Check each program pattern
+            for program, patterns in self.program_patterns.items():
+                for pattern in patterns:
+                    if pattern in description_lower:
+                        return program, 1.0
 
-        # Check each program pattern
-        for program, patterns in self.program_patterns.items():
-            for pattern in patterns:
-                if pattern in description_lower:
-                    return program, 1.0
+        # If we have billing code, try to match it
+        if billing_code and billing_code.lower() not in ['nan', 'none', '']:
+            billing_code = str(billing_code).strip()
 
-        # Check billing code patterns (customize based on your codes)
-        if billing_code.startswith('G'):
-            return 'HHA', 0.85
-        elif billing_code.startswith('S'):
-            return 'CDPAP', 0.85
+            # Check billing code patterns (customize based on your codes)
+            if billing_code.upper().startswith('G'):
+                return 'HHA', 0.85
+            elif billing_code.upper().startswith('S'):
+                return 'CDPAP', 0.85
+            elif billing_code.upper().startswith('T'):
+                return 'Therapy', 0.85
+            elif any(code in billing_code.upper() for code in ['9920', '9921', '9922', '9923', '9924', '9925']):
+                return 'Nursing', 0.9
+            elif any(code in billing_code for code in ['2443', '2444', '2445', '8400', '8401', '8402']):
+                return 'HHA', 0.9
 
-        return 'Unknown', 0.5
+        # If we have either description or code, but no match, it's still uncertain
+        if description or billing_code:
+            return 'Unknown', 0.6
+
+        # If we have neither, it's very uncertain
+        return 'Unknown', 0.3
 
     def save_to_template(self, template_path: str, output_path: str):
         """Save tagged data to actual template"""

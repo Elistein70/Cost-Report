@@ -222,6 +222,52 @@ def process_files():
                             'approved': None
                         })
 
+            # Process visit uncertain items
+            if visit_processor:
+                for item in visit_processor.flagged_items:
+                    if item['confidence'] < 0.92:
+                        possible_tags = list(set(visit_processor.program_patterns.keys()))
+                        ai_tag, reasoning, ai_confidence = ai_reason_tag(
+                            item['original_value'],
+                            "visit service type",
+                            possible_tags
+                        )
+                        ai_tagged_items.append({
+                            'type': 'Visit',
+                            'original_value': item['original_value'],
+                            'fuzzy_tag': item['suggested_tag'],
+                            'fuzzy_confidence': item['confidence'],
+                            'ai_tag': ai_tag,
+                            'ai_reasoning': reasoning,
+                            'ai_confidence': ai_confidence,
+                            'row_number': item['row_number'],
+                            'approved': None
+                        })
+
+            # Process TB uncertain items
+            if tb_processor:
+                for item in tb_processor.flagged_items:
+                    if item['confidence'] < 0.92:
+                        # TB processor would need expense categories defined
+                        possible_tags = ['Salary & Wages', 'Payroll Taxes', 'Employee Benefits',
+                                       'Contracted Services', 'Supplies', 'Occupancy', 'Other']
+                        ai_tag, reasoning, ai_confidence = ai_reason_tag(
+                            item['original_value'],
+                            "expense account",
+                            possible_tags
+                        )
+                        ai_tagged_items.append({
+                            'type': 'Trial Balance',
+                            'original_value': item['original_value'],
+                            'fuzzy_tag': item['suggested_tag'],
+                            'fuzzy_confidence': item['confidence'],
+                            'ai_tag': ai_tag,
+                            'ai_reasoning': reasoning,
+                            'ai_confidence': ai_confidence,
+                            'row_number': item['row_number'],
+                            'approved': None
+                        })
+
             # Store processors and AI items in session state
             st.session_state.payroll_processor = payroll_processor
             st.session_state.tb_processor = tb_processor
@@ -245,7 +291,7 @@ def generate_output_files():
     output_dir.mkdir(exist_ok=True)
 
     # Generate Payroll output
-    if st.session_state.payroll_processor:
+    if st.session_state.payroll_processor and st.session_state.payroll_processor is not None:
         payroll_data = st.session_state.payroll_processor.tagged_data
         if payroll_data is not None and not payroll_data.empty:
             # Apply approved AI tags
@@ -261,17 +307,31 @@ def generate_output_files():
             st.session_state.payroll_output_path = str(payroll_path)
 
     # Generate TB output
-    if st.session_state.tb_processor:
+    if st.session_state.tb_processor and st.session_state.tb_processor is not None:
         tb_data = st.session_state.tb_processor.tagged_data
         if tb_data is not None and not tb_data.empty:
+            # Apply approved AI tags
+            for item in st.session_state.ai_tagged_items:
+                if item['type'] == 'Trial Balance' and item['approved']:
+                    row_idx = item['row_number'] - 2  # Adjust for row offset
+                    if row_idx < len(tb_data):
+                        tb_data.at[row_idx, 'Category'] = item['ai_tag']
+
             tb_path = output_dir / f"TB_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
             tb_data.to_excel(tb_path, index=False)
             st.session_state.tb_output_path = str(tb_path)
 
     # Generate Visit output
-    if st.session_state.visit_processor:
+    if st.session_state.visit_processor and st.session_state.visit_processor is not None:
         visit_data = st.session_state.visit_processor.tagged_data
         if visit_data is not None and not visit_data.empty:
+            # Apply approved AI tags
+            for item in st.session_state.ai_tagged_items:
+                if item['type'] == 'Visit' and item['approved']:
+                    row_idx = item['row_number'] - 2  # Adjust for row offset
+                    if row_idx < len(visit_data):
+                        visit_data.at[row_idx, 'Program_Type'] = item['ai_tag']
+
             visit_path = output_dir / f"Visit_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
             visit_data.to_excel(visit_path, index=False)
             st.session_state.visit_output_path = str(visit_path)
