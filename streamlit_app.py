@@ -196,83 +196,88 @@ def process_files():
                 visit_processor = VisitProcessor(str(combined_visit_path), None)
                 visit_processor.process()
 
-            # Use AI reasoning for uncertain tags
-            st.info("🤖 Using AI to reason about uncertain items...")
-            ai_tagged_items = []
+            # Use AI reasoning for uncertain tags (if enabled)
+            if st.session_state.use_ai_reasoning:
+                st.info("🤖 Using AI to reason about uncertain items...")
+                ai_tagged_items = []
 
-            # Process payroll uncertain items
-            if payroll_processor:
-                for item in payroll_processor.flagged_items:
-                    if item['confidence'] < 0.92:
-                        possible_tags = list(payroll_processor.paycode_tags.values())
-                        ai_tag, reasoning, ai_confidence = ai_reason_tag(
-                            item['original_value'],
-                            "payroll code",
-                            possible_tags
-                        )
-                        ai_tagged_items.append({
-                            'type': 'Payroll',
-                            'original_value': item['original_value'],
-                            'fuzzy_tag': item['suggested_tag'],
-                            'fuzzy_confidence': item['confidence'],
-                            'ai_tag': ai_tag,
-                            'ai_reasoning': reasoning,
-                            'ai_confidence': ai_confidence,
-                            'row_number': item['row_number'],
-                            'approved': None
-                        })
+                # Process payroll uncertain items
+                if payroll_processor:
+                    for item in payroll_processor.flagged_items:
+                        if item['confidence'] < 0.92:
+                            possible_tags = list(payroll_processor.paycode_tags.values())
+                            ai_tag, reasoning, ai_confidence = ai_reason_tag(
+                                item['original_value'],
+                                "payroll code",
+                                possible_tags
+                            )
+                            ai_tagged_items.append({
+                                'type': 'Payroll',
+                                'original_value': item['original_value'],
+                                'fuzzy_tag': item['suggested_tag'],
+                                'fuzzy_confidence': item['confidence'],
+                                'ai_tag': ai_tag,
+                                'ai_reasoning': reasoning,
+                                'ai_confidence': ai_confidence,
+                                'row_number': item['row_number'],
+                                'approved': None
+                            })
 
-            # Process visit uncertain items
-            if visit_processor:
-                for item in visit_processor.flagged_items:
-                    if item['confidence'] < 0.92:
-                        possible_tags = list(set(visit_processor.program_patterns.keys()))
-                        ai_tag, reasoning, ai_confidence = ai_reason_tag(
-                            item['original_value'],
-                            "visit service type",
-                            possible_tags
-                        )
-                        ai_tagged_items.append({
-                            'type': 'Visit',
-                            'original_value': item['original_value'],
-                            'fuzzy_tag': item['suggested_tag'],
-                            'fuzzy_confidence': item['confidence'],
-                            'ai_tag': ai_tag,
-                            'ai_reasoning': reasoning,
-                            'ai_confidence': ai_confidence,
-                            'row_number': item['row_number'],
-                            'approved': None
-                        })
+                # Process visit uncertain items
+                if visit_processor:
+                    for item in visit_processor.flagged_items:
+                        if item['confidence'] < 0.92:
+                            possible_tags = list(set(visit_processor.program_patterns.keys()))
+                            ai_tag, reasoning, ai_confidence = ai_reason_tag(
+                                item['original_value'],
+                                "visit service type",
+                                possible_tags
+                            )
+                            ai_tagged_items.append({
+                                'type': 'Visit',
+                                'original_value': item['original_value'],
+                                'fuzzy_tag': item['suggested_tag'],
+                                'fuzzy_confidence': item['confidence'],
+                                'ai_tag': ai_tag,
+                                'ai_reasoning': reasoning,
+                                'ai_confidence': ai_confidence,
+                                'row_number': item['row_number'],
+                                'approved': None
+                            })
 
-            # Process TB uncertain items
-            if tb_processor:
-                for item in tb_processor.flagged_items:
-                    if item['confidence'] < 0.92:
-                        # TB processor would need expense categories defined
-                        possible_tags = ['Salary & Wages', 'Payroll Taxes', 'Employee Benefits',
-                                       'Contracted Services', 'Supplies', 'Occupancy', 'Other']
-                        ai_tag, reasoning, ai_confidence = ai_reason_tag(
-                            item['original_value'],
-                            "expense account",
-                            possible_tags
-                        )
-                        ai_tagged_items.append({
-                            'type': 'Trial Balance',
-                            'original_value': item['original_value'],
-                            'fuzzy_tag': item['suggested_tag'],
-                            'fuzzy_confidence': item['confidence'],
-                            'ai_tag': ai_tag,
-                            'ai_reasoning': reasoning,
-                            'ai_confidence': ai_confidence,
-                            'row_number': item['row_number'],
-                            'approved': None
-                        })
+                # Process TB uncertain items
+                if tb_processor:
+                    for item in tb_processor.flagged_items:
+                        if item['confidence'] < 0.92:
+                            # TB processor would need expense categories defined
+                            possible_tags = ['Salary & Wages', 'Payroll Taxes', 'Employee Benefits',
+                                           'Contracted Services', 'Supplies', 'Occupancy', 'Other']
+                            ai_tag, reasoning, ai_confidence = ai_reason_tag(
+                                item['original_value'],
+                                "expense account",
+                                possible_tags
+                            )
+                            ai_tagged_items.append({
+                                'type': 'Trial Balance',
+                                'original_value': item['original_value'],
+                                'fuzzy_tag': item['suggested_tag'],
+                                'fuzzy_confidence': item['confidence'],
+                                'ai_tag': ai_tag,
+                                'ai_reasoning': reasoning,
+                                'ai_confidence': ai_confidence,
+                                'row_number': item['row_number'],
+                                'approved': None
+                            })
+
+                st.session_state.ai_tagged_items = ai_tagged_items
+            else:
+                st.info("⚡ Fast mode - skipping AI reasoning")
+                st.session_state.ai_tagged_items = []
 
             # Store processors and AI items in session state
             st.session_state.payroll_processor = payroll_processor
             st.session_state.tb_processor = tb_processor
             st.session_state.visit_processor = visit_processor
-            st.session_state.ai_tagged_items = ai_tagged_items
             st.session_state.processing_complete = True
 
             # Clean up temp directory
@@ -404,6 +409,8 @@ if 'process_tb' not in st.session_state:
     st.session_state.process_tb = True
 if 'process_payroll' not in st.session_state:
     st.session_state.process_payroll = True
+if 'use_ai_reasoning' not in st.session_state:
+    st.session_state.use_ai_reasoning = False
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
 if 'ai_tagged_items' not in st.session_state:
@@ -527,6 +534,15 @@ if not st.session_state.processing_complete:
     # Process Button
     st.markdown("---")
 
+    # AI Reasoning Toggle
+    use_ai = st.checkbox(
+        "🤖 Use AI Reasoning for uncertain items (slower but more accurate)",
+        value=st.session_state.use_ai_reasoning,
+        key="ai_toggle",
+        help="Uncheck for faster processing using fuzzy matching only"
+    )
+    st.session_state.use_ai_reasoning = use_ai
+
     # Check if at least one file type is selected AND has files
     any_selected = (
         (st.session_state.process_visit and len(st.session_state.visit_files) > 0) or
@@ -546,11 +562,16 @@ if not st.session_state.processing_complete:
 
         st.info(f"📋 Will process: {', '.join(processing_list)}")
 
-        if st.button("🚀 Process Selected Files with AI", type="primary", use_container_width=True):
+        if use_ai:
+            st.warning("⏱️ AI reasoning enabled - this may take 1-2 minutes for large files")
+        else:
+            st.success("⚡ Fast mode - processing will be quick!")
+
+        if st.button("🚀 Process Selected Files", type="primary", use_container_width=True):
             process_files()
     else:
         st.warning("👆 Please check at least one file type and upload files to continue")
-        st.button("🚀 Process Selected Files with AI", type="primary", use_container_width=True, disabled=True)
+        st.button("🚀 Process Selected Files", type="primary", use_container_width=True, disabled=True)
 
 # Step 3: AI Review Workflow
 if st.session_state.processing_complete and not st.session_state.outputs_generated:
