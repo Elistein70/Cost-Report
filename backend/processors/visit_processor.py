@@ -2,7 +2,10 @@
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any
-from config import settings
+try:
+    from config import settings
+except ImportError:
+    from backend.config_simple import settings
 
 
 class VisitProcessor:

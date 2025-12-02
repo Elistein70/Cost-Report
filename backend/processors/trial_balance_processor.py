@@ -3,7 +3,10 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any
 from rapidfuzz import fuzz
-from config import settings
+try:
+    from config import settings
+except ImportError:
+    from backend.config_simple import settings
 
 
 class TrialBalanceProcessor:
