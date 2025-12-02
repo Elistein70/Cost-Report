@@ -117,11 +117,15 @@ def process_files():
                     f.write(visit_file.read())
 
                 # Read and combine
-                if visit_file.name.endswith('.csv'):
-                    df = pd.read_csv(visit_path)
-                else:
-                    df = pd.read_excel(visit_path)
-                visit_dfs.append(df)
+                try:
+                    if visit_file.name.endswith('.csv'):
+                        df = pd.read_csv(visit_path)
+                    else:
+                        df = pd.read_excel(visit_path, engine='openpyxl')
+                    visit_dfs.append(df)
+                except Exception as e:
+                    st.error(f"Error reading visit file {visit_file.name}: {str(e)}")
+                    raise
 
             combined_visit_path = temp_dir / "combined_visits.xlsx"
             combined_visits = pd.concat(visit_dfs, ignore_index=True) if visit_dfs else pd.DataFrame()
@@ -134,11 +138,15 @@ def process_files():
                 with open(tb_path, 'wb') as f:
                     f.write(tb_file.read())
 
-                if tb_file.name.endswith('.csv'):
-                    df = pd.read_csv(tb_path)
-                else:
-                    df = pd.read_excel(tb_path)
-                tb_dfs.append(df)
+                try:
+                    if tb_file.name.endswith('.csv'):
+                        df = pd.read_csv(tb_path)
+                    else:
+                        df = pd.read_excel(tb_path, engine='openpyxl')
+                    tb_dfs.append(df)
+                except Exception as e:
+                    st.error(f"Error reading TB file {tb_file.name}: {str(e)}")
+                    raise
 
             combined_tb_path = temp_dir / "combined_tb.xlsx"
             combined_tb = pd.concat(tb_dfs, ignore_index=True) if tb_dfs else pd.DataFrame()
