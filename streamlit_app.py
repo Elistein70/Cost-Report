@@ -26,6 +26,87 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# DEFINE PROCESS FUNCTION FIRST (before it's called in UI)
+def process_files():
+    """Process all uploaded files following SOP"""
+
+    with st.spinner("🔄 Processing files... This may take a few minutes..."):
+        try:
+            all_questions = []
+
+            # Create temporary directory for processing
+            temp_dir = Path(tempfile.mkdtemp())
+
+            # Save uploaded files
+            visit_path = temp_dir / f"visit_{st.session_state.visit_file.name}"
+            tb_path = temp_dir / f"tb_{st.session_state.tb_file.name}"
+            payroll_path = temp_dir / f"payroll_{st.session_state.payroll_file.name}"
+
+            with open(visit_path, 'wb') as f:
+                f.write(st.session_state.visit_file.read())
+            with open(tb_path, 'wb') as f:
+                f.write(st.session_state.tb_file.read())
+            with open(payroll_path, 'wb') as f:
+                f.write(st.session_state.payroll_file.read())
+
+            # Process Payroll
+            st.info("📊 Processing payroll data...")
+            payroll_processor = PayrollProcessor(str(payroll_path), None)
+            payroll_processor.process()
+            all_questions.extend(payroll_processor.get_questions())
+
+            # Process Trial Balance
+            st.info("💼 Processing trial balance...")
+            tb_processor = TrialBalanceProcessor(str(tb_path), None)
+            tb_processor.process()
+            all_questions.extend(tb_processor.get_questions())
+
+            # Process Visits
+            st.info("📋 Processing visit data...")
+            visit_processor = VisitProcessor(str(visit_path), None)
+            visit_processor.process()
+            all_questions.extend(visit_processor.get_questions())
+
+            # Generate final report
+            st.info("📝 Generating final report...")
+
+            # Get template path
+            template_path = Path(__file__).parent / "data" / "templates" / "Anchor and Nemo Core Schedules Template -2024 - Audit Adjustments.xlsm"
+
+            if not template_path.exists():
+                st.error("❌ Template file not found. Please ensure the template is in data/templates/")
+                return
+
+            # Output path
+            output_dir = Path(__file__).parent / "output"
+            output_dir.mkdir(exist_ok=True)
+
+            output_filename = f"{st.session_state.agency_name}_DOH_Cost_Report_{st.session_state.year}_FINAL.xlsm"
+            output_path = output_dir / output_filename
+
+            # Copy template
+            shutil.copy(template_path, output_path)
+
+            # Write data to template
+            payroll_processor.save_to_template(str(template_path), str(output_path))
+            tb_processor.save_to_template(str(output_path), str(output_path))
+            visit_processor.save_to_template(str(output_path), str(output_path))
+
+            # Update session state
+            st.session_state.questions = list(set(all_questions))  # Remove duplicates
+            st.session_state.report_path = str(output_path)
+            st.session_state.processing_complete = True
+
+            # Clean up temp directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+            st.success("✅ Processing complete!")
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"❌ Error during processing: {str(e)}")
+            st.exception(e)
+
 # Custom CSS for better styling
 st.markdown("""
 <style>
@@ -258,88 +339,3 @@ st.markdown("""
     <p style="margin-top: 0.5rem;">ClearDOH v1.0 | Home Care Consulting Group</p>
 </div>
 """, unsafe_allow_html=True)
-
-
-def process_files():
-    """Process all uploaded files following SOP"""
-
-    with st.spinner("🔄 Processing files... This may take a few minutes..."):
-        try:
-            all_questions = []
-
-            # Create temporary directory for processing
-            temp_dir = Path(tempfile.mkdtemp())
-
-            # Save uploaded files
-            visit_path = temp_dir / f"visit_{st.session_state.visit_file.name}"
-            tb_path = temp_dir / f"tb_{st.session_state.tb_file.name}"
-            payroll_path = temp_dir / f"payroll_{st.session_state.payroll_file.name}"
-
-            with open(visit_path, 'wb') as f:
-                f.write(st.session_state.visit_file.read())
-            with open(tb_path, 'wb') as f:
-                f.write(st.session_state.tb_file.read())
-            with open(payroll_path, 'wb') as f:
-                f.write(st.session_state.payroll_file.read())
-
-            # Process Payroll
-            st.info("📊 Processing payroll data...")
-            payroll_processor = PayrollProcessor(str(payroll_path), None)
-            payroll_processor.process()
-            all_questions.extend(payroll_processor.get_questions())
-
-            # Process Trial Balance
-            st.info("💼 Processing trial balance...")
-            tb_processor = TrialBalanceProcessor(str(tb_path), None)
-            tb_processor.process()
-            all_questions.extend(tb_processor.get_questions())
-
-            # Process Visits
-            st.info("📋 Processing visit data...")
-            visit_processor = VisitProcessor(str(visit_path), None)
-            visit_processor.process()
-            all_questions.extend(visit_processor.get_questions())
-
-            # Generate final report
-            st.info("📝 Generating final report...")
-
-            # Get template path
-            template_path = Path(__file__).parent / "data" / "templates" / "Anchor and Nemo Core Schedules Template -2024 - Audit Adjustments.xlsm"
-
-            if not template_path.exists():
-                st.error("❌ Template file not found. Please ensure the template is in data/templates/")
-                return
-
-            # Output path
-            output_dir = Path(__file__).parent / "output"
-            output_dir.mkdir(exist_ok=True)
-
-            output_filename = f"{st.session_state.agency_name}_DOH_Cost_Report_{st.session_state.year}_FINAL.xlsm"
-            output_path = output_dir / output_filename
-
-            # Copy template
-            shutil.copy(template_path, output_path)
-
-            # Write data to template
-            payroll_processor.save_to_template(str(template_path), str(output_path))
-            tb_processor.save_to_template(str(output_path), str(output_path))
-            visit_processor.save_to_template(str(output_path), str(output_path))
-
-            # Update session state
-            st.session_state.questions = list(set(all_questions))  # Remove duplicates
-            st.session_state.report_path = str(output_path)
-            st.session_state.processing_complete = True
-
-            # Clean up temp directory
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-            st.success("✅ Processing complete!")
-            st.rerun()
-
-        except Exception as e:
-            st.error(f"❌ Error during processing: {str(e)}")
-            st.exception(e)
-
-
-if __name__ == "__main__":
-    pass
