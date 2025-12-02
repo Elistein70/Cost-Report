@@ -20,12 +20,12 @@ from processors.payroll_processor import PayrollProcessor
 from processors.trial_balance_processor import TrialBalanceProcessor
 from processors.visit_processor import VisitProcessor
 
-# Import Anthropic for AI reasoning
+# Import OpenAI for AI reasoning
 try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
 except ImportError:
-    ANTHROPIC_AVAILABLE = False
+    OPENAI_AVAILABLE = False
 
 # Page configuration
 st.set_page_config(
@@ -38,15 +38,15 @@ st.set_page_config(
 # AI reasoning function
 def ai_reason_tag(item_description: str, item_type: str, possible_tags: list) -> tuple:
     """Use AI to reason about uncertain tags"""
-    if not ANTHROPIC_AVAILABLE:
-        return "AI reasoning unavailable", "Install anthropic package", 0.5
+    if not OPENAI_AVAILABLE:
+        return "AI reasoning unavailable", "Install openai package", 0.5
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        return "No API key", "Set ANTHROPIC_API_KEY in Streamlit secrets", 0.5
+        return "No API key", "Set OPENAI_API_KEY in Streamlit secrets", 0.5
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        client = OpenAI(api_key=api_key)
 
         prompt = f"""You are a DOH cost report expert. Analyze this {item_type} and determine the most appropriate tag.
 
@@ -64,20 +64,24 @@ REASONING: [your step-by-step reasoning]
 TAG: [recommended tag from the list]
 CONFIDENCE: [0.0-1.0]"""
 
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a DOH cost report expert specialized in home care accounting and reporting requirements."},
+                {"role": "user", "content": prompt}
+            ],
             max_tokens=500,
-            messages=[{"role": "user", "content": prompt}]
+            temperature=0.3
         )
 
-        response = message.content[0].text
+        response_text = response.choices[0].message.content
 
         # Parse response
         reasoning = ""
         tag = ""
         confidence = 0.8
 
-        for line in response.split('\n'):
+        for line in response_text.split('\n'):
             if line.startswith('REASONING:'):
                 reasoning = line.replace('REASONING:', '').strip()
             elif line.startswith('TAG:'):

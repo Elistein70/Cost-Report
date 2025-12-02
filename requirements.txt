@@ -5,4 +5,4 @@ pdfplumber
 rapidfuzz
 xlrd
 Pillow
-anthropic
+openai
