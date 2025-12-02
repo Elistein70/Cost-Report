@@ -52,10 +52,51 @@ class VisitProcessor:
         return self.flagged_items
 
     def _load_file(self) -> pd.DataFrame:
-        """Load visit data file - only reads 'Detail Data' tab from Excel"""
-        if self.file_path.suffix.lower() in ['.xlsx', '.xls']:
-            # Only read from 'Detail Data' sheet
-            df = pd.read_excel(self.file_path, sheet_name='Detail Data', engine='openpyxl')
+        """Load visit data file - automatically finds sheet with matching headers"""
+        if self.file_path.suffix.lower() in ['.xlsx', '.xls', '.xlsm']:
+            # Expected headers (any of these variations)
+            expected_headers = [
+                'billing_code', 'code', 'service_code',
+                'description', 'service',
+                'visits', 'visit_count', 'unique_visits',
+                'hours', 'billed_hours', 'unique_hours',
+                'patients', 'unique_patients'
+            ]
+
+            # Try to find the right sheet by checking headers
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(self.file_path, read_only=True, data_only=True)
+
+                matching_sheet = None
+                for sheet_name in wb.sheetnames:
+                    try:
+                        # Read first few rows to check headers
+                        df_test = pd.read_excel(self.file_path, sheet_name=sheet_name, engine='openpyxl', nrows=5)
+
+                        # Check if any expected headers are in the columns
+                        columns_lower = [str(col).strip().lower() for col in df_test.columns]
+                        matches = sum(1 for header in expected_headers if any(header in col for col in columns_lower))
+
+                        # If we find at least 3 matching headers, this is probably the right sheet
+                        if matches >= 3:
+                            matching_sheet = sheet_name
+                            break
+                    except Exception:
+                        continue
+
+                wb.close()
+
+                # If we found a matching sheet, use it
+                if matching_sheet:
+                    df = pd.read_excel(self.file_path, sheet_name=matching_sheet, engine='openpyxl')
+                else:
+                    # Fall back to first sheet if no match found
+                    df = pd.read_excel(self.file_path, engine='openpyxl')
+
+            except Exception as e:
+                # If any error, just read the first sheet
+                df = pd.read_excel(self.file_path, engine='openpyxl')
         else:
             df = pd.read_csv(self.file_path)
 
