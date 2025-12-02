@@ -107,109 +107,120 @@ def process_files():
             temp_dir = Path(tempfile.mkdtemp())
 
             # Combine multiple files for each category
-            st.info("📥 Combining uploaded files...")
+            st.info("📥 Processing selected file types...")
 
-            # Combine Visit Data files
+            # Combine Visit Data files (if selected)
             visit_dfs = []
-            for visit_file in st.session_state.visit_files:
-                visit_path = temp_dir / f"visit_{visit_file.name}"
-                with open(visit_path, 'wb') as f:
-                    f.write(visit_file.read())
+            if st.session_state.process_visit:
+                for visit_file in st.session_state.visit_files:
+                    visit_path = temp_dir / f"visit_{visit_file.name}"
+                    with open(visit_path, 'wb') as f:
+                        f.write(visit_file.read())
 
-                # Read and combine
-                try:
-                    if visit_file.name.endswith('.csv'):
-                        df = pd.read_csv(visit_path)
-                    else:
-                        df = pd.read_excel(visit_path, engine='openpyxl')
-                    visit_dfs.append(df)
-                except Exception as e:
-                    st.error(f"Error reading visit file {visit_file.name}: {str(e)}")
-                    raise
+                    # Read and combine
+                    try:
+                        if visit_file.name.endswith('.csv'):
+                            df = pd.read_csv(visit_path)
+                        else:
+                            df = pd.read_excel(visit_path, engine='openpyxl')
+                        visit_dfs.append(df)
+                    except Exception as e:
+                        st.error(f"Error reading visit file {visit_file.name}: {str(e)}")
+                        raise
 
-            combined_visit_path = temp_dir / "combined_visits.xlsx"
-            combined_visits = pd.concat(visit_dfs, ignore_index=True) if visit_dfs else pd.DataFrame()
-            combined_visits.to_excel(combined_visit_path, index=False)
+                combined_visit_path = temp_dir / "combined_visits.xlsx"
+                combined_visits = pd.concat(visit_dfs, ignore_index=True) if visit_dfs else pd.DataFrame()
+                combined_visits.to_excel(combined_visit_path, index=False)
 
-            # Combine Trial Balance files
+            # Combine Trial Balance files (if selected)
             tb_dfs = []
-            for tb_file in st.session_state.tb_files:
-                tb_path = temp_dir / f"tb_{tb_file.name}"
-                with open(tb_path, 'wb') as f:
-                    f.write(tb_file.read())
+            if st.session_state.process_tb:
+                for tb_file in st.session_state.tb_files:
+                    tb_path = temp_dir / f"tb_{tb_file.name}"
+                    with open(tb_path, 'wb') as f:
+                        f.write(tb_file.read())
 
-                try:
-                    if tb_file.name.endswith('.csv'):
-                        df = pd.read_csv(tb_path)
-                    else:
-                        df = pd.read_excel(tb_path, engine='openpyxl')
-                    tb_dfs.append(df)
-                except Exception as e:
-                    st.error(f"Error reading TB file {tb_file.name}: {str(e)}")
-                    raise
+                    try:
+                        if tb_file.name.endswith('.csv'):
+                            df = pd.read_csv(tb_path)
+                        else:
+                            df = pd.read_excel(tb_path, engine='openpyxl')
+                        tb_dfs.append(df)
+                    except Exception as e:
+                        st.error(f"Error reading TB file {tb_file.name}: {str(e)}")
+                        raise
 
-            combined_tb_path = temp_dir / "combined_tb.xlsx"
-            combined_tb = pd.concat(tb_dfs, ignore_index=True) if tb_dfs else pd.DataFrame()
-            combined_tb.to_excel(combined_tb_path, index=False)
+                combined_tb_path = temp_dir / "combined_tb.xlsx"
+                combined_tb = pd.concat(tb_dfs, ignore_index=True) if tb_dfs else pd.DataFrame()
+                combined_tb.to_excel(combined_tb_path, index=False)
 
-            # Combine Payroll files
+            # Combine Payroll files (if selected)
             payroll_dfs = []
-            for payroll_file in st.session_state.payroll_files:
-                payroll_path = temp_dir / f"payroll_{payroll_file.name}"
-                with open(payroll_path, 'wb') as f:
-                    f.write(payroll_file.read())
+            if st.session_state.process_payroll:
+                for payroll_file in st.session_state.payroll_files:
+                    payroll_path = temp_dir / f"payroll_{payroll_file.name}"
+                    with open(payroll_path, 'wb') as f:
+                        f.write(payroll_file.read())
 
-                # Process based on file type
-                processor = PayrollProcessor(str(payroll_path), None)
-                if payroll_file.name.endswith('.pdf'):
-                    df = processor._extract_from_pdf()
-                else:
-                    df = processor._extract_from_csv()
+                    # Process based on file type
+                    processor = PayrollProcessor(str(payroll_path), None)
+                    if payroll_file.name.endswith('.pdf'):
+                        df = processor._extract_from_pdf()
+                    else:
+                        df = processor._extract_from_csv()
 
-                if df is not None and not df.empty:
-                    payroll_dfs.append(df)
+                    if df is not None and not df.empty:
+                        payroll_dfs.append(df)
 
-            combined_payroll_path = temp_dir / "combined_payroll.xlsx"
-            combined_payroll = pd.concat(payroll_dfs, ignore_index=True) if payroll_dfs else pd.DataFrame()
-            combined_payroll.to_excel(combined_payroll_path, index=False)
+                combined_payroll_path = temp_dir / "combined_payroll.xlsx"
+                combined_payroll = pd.concat(payroll_dfs, ignore_index=True) if payroll_dfs else pd.DataFrame()
+                combined_payroll.to_excel(combined_payroll_path, index=False)
 
-            # Process each combined file
-            st.info("📊 Processing payroll data...")
-            payroll_processor = PayrollProcessor(str(combined_payroll_path), None)
-            payroll_processor.process()
+            # Process each selected file type
+            payroll_processor = None
+            tb_processor = None
+            visit_processor = None
 
-            st.info("💼 Processing trial balance...")
-            tb_processor = TrialBalanceProcessor(str(combined_tb_path), None)
-            tb_processor.process()
+            if st.session_state.process_payroll and len(st.session_state.payroll_files) > 0:
+                st.info("📊 Processing payroll data...")
+                payroll_processor = PayrollProcessor(str(combined_payroll_path), None)
+                payroll_processor.process()
 
-            st.info("📋 Processing visit data...")
-            visit_processor = VisitProcessor(str(combined_visit_path), None)
-            visit_processor.process()
+            if st.session_state.process_tb and len(st.session_state.tb_files) > 0:
+                st.info("💼 Processing trial balance...")
+                tb_processor = TrialBalanceProcessor(str(combined_tb_path), None)
+                tb_processor.process()
+
+            if st.session_state.process_visit and len(st.session_state.visit_files) > 0:
+                st.info("📋 Processing visit data...")
+                visit_processor = VisitProcessor(str(combined_visit_path), None)
+                visit_processor.process()
 
             # Use AI reasoning for uncertain tags
             st.info("🤖 Using AI to reason about uncertain items...")
             ai_tagged_items = []
 
             # Process payroll uncertain items
-            for item in payroll_processor.flagged_items:
-                if item['confidence'] < 0.92:
-                    possible_tags = list(payroll_processor.paycode_tags.values())
-                    ai_tag, reasoning, ai_confidence = ai_reason_tag(
-                        item['original_value'],
-                        "payroll code",
-                        possible_tags
-                    )
-                    ai_tagged_items.append({
-                        'type': 'Payroll',
-                        'original_value': item['original_value'],
-                        'fuzzy_tag': item['suggested_tag'],
-                        'fuzzy_confidence': item['confidence'],
-                        'ai_tag': ai_tag,
-                        'ai_reasoning': reasoning,
-                        'ai_confidence': ai_confidence,
-                        'row_number': item['row_number'],
-                        'approved': None
-                    })
+            if payroll_processor:
+                for item in payroll_processor.flagged_items:
+                    if item['confidence'] < 0.92:
+                        possible_tags = list(payroll_processor.paycode_tags.values())
+                        ai_tag, reasoning, ai_confidence = ai_reason_tag(
+                            item['original_value'],
+                            "payroll code",
+                            possible_tags
+                        )
+                        ai_tagged_items.append({
+                            'type': 'Payroll',
+                            'original_value': item['original_value'],
+                            'fuzzy_tag': item['suggested_tag'],
+                            'fuzzy_confidence': item['confidence'],
+                            'ai_tag': ai_tag,
+                            'ai_reasoning': reasoning,
+                            'ai_confidence': ai_confidence,
+                            'row_number': item['row_number'],
+                            'approved': None
+                        })
 
             # Store processors and AI items in session state
             st.session_state.payroll_processor = payroll_processor
@@ -234,33 +245,36 @@ def generate_output_files():
     output_dir.mkdir(exist_ok=True)
 
     # Generate Payroll output
-    payroll_data = st.session_state.payroll_processor.tagged_data
-    if payroll_data is not None and not payroll_data.empty:
-        # Apply approved AI tags
-        for item in st.session_state.ai_tagged_items:
-            if item['type'] == 'Payroll' and item['approved']:
-                row_idx = item['row_number'] - 6  # Adjust for row offset
-                if row_idx < len(payroll_data):
-                    payroll_data.at[row_idx, 'Tag'] = item['ai_tag']
+    if st.session_state.payroll_processor:
+        payroll_data = st.session_state.payroll_processor.tagged_data
+        if payroll_data is not None and not payroll_data.empty:
+            # Apply approved AI tags
+            for item in st.session_state.ai_tagged_items:
+                if item['type'] == 'Payroll' and item['approved']:
+                    row_idx = item['row_number'] - 6  # Adjust for row offset
+                    if row_idx < len(payroll_data):
+                        payroll_data.at[row_idx, 'Tag'] = item['ai_tag']
 
-        payroll_output = payroll_data[['Tag', 'Code', 'Hours', 'Amount', 'Tax_Category', 'Tax_Code', 'Tax_Amount']]
-        payroll_path = output_dir / f"Payroll_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        payroll_output.to_excel(payroll_path, index=False)
-        st.session_state.payroll_output_path = str(payroll_path)
+            payroll_output = payroll_data[['Tag', 'Code', 'Hours', 'Amount', 'Tax_Category', 'Tax_Code', 'Tax_Amount']]
+            payroll_path = output_dir / f"Payroll_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            payroll_output.to_excel(payroll_path, index=False)
+            st.session_state.payroll_output_path = str(payroll_path)
 
     # Generate TB output
-    tb_data = st.session_state.tb_processor.tagged_data
-    if tb_data is not None and not tb_data.empty:
-        tb_path = output_dir / f"TB_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        tb_data.to_excel(tb_path, index=False)
-        st.session_state.tb_output_path = str(tb_path)
+    if st.session_state.tb_processor:
+        tb_data = st.session_state.tb_processor.tagged_data
+        if tb_data is not None and not tb_data.empty:
+            tb_path = output_dir / f"TB_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            tb_data.to_excel(tb_path, index=False)
+            st.session_state.tb_output_path = str(tb_path)
 
     # Generate Visit output
-    visit_data = st.session_state.visit_processor.tagged_data
-    if visit_data is not None and not visit_data.empty:
-        visit_path = output_dir / f"Visit_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        visit_data.to_excel(visit_path, index=False)
-        st.session_state.visit_output_path = str(visit_path)
+    if st.session_state.visit_processor:
+        visit_data = st.session_state.visit_processor.tagged_data
+        if visit_data is not None and not visit_data.empty:
+            visit_path = output_dir / f"Visit_Tagged_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            visit_data.to_excel(visit_path, index=False)
+            st.session_state.visit_output_path = str(visit_path)
 
     st.session_state.outputs_generated = True
 
@@ -324,6 +338,12 @@ if 'tb_files' not in st.session_state:
     st.session_state.tb_files = []
 if 'payroll_files' not in st.session_state:
     st.session_state.payroll_files = []
+if 'process_visit' not in st.session_state:
+    st.session_state.process_visit = True
+if 'process_tb' not in st.session_state:
+    st.session_state.process_tb = True
+if 'process_payroll' not in st.session_state:
+    st.session_state.process_payroll = True
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
 if 'ai_tagged_items' not in st.session_state:
@@ -392,12 +412,16 @@ if not st.session_state.processing_complete:
 
     with col1:
         st.markdown("#### 1️⃣ Visit Data (Schedule 5)")
+        process_visit = st.checkbox("Process Visit Data", value=st.session_state.process_visit, key="visit_checkbox")
+        st.session_state.process_visit = process_visit
+
         visit_files = st.file_uploader(
             "Upload visit data files",
             type=['xlsx', 'xls', 'csv'],
             key="visit_uploader",
             accept_multiple_files=True,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            disabled=not process_visit
         )
         if visit_files:
             st.session_state.visit_files = visit_files
@@ -406,12 +430,16 @@ if not st.session_state.processing_complete:
 
     with col2:
         st.markdown("#### 2️⃣ Trial Balance")
+        process_tb = st.checkbox("Process Trial Balance", value=st.session_state.process_tb, key="tb_checkbox")
+        st.session_state.process_tb = process_tb
+
         tb_files = st.file_uploader(
             "Upload trial balance files",
             type=['xlsx', 'xls', 'csv'],
             key="tb_uploader",
             accept_multiple_files=True,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            disabled=not process_tb
         )
         if tb_files:
             st.session_state.tb_files = tb_files
@@ -420,12 +448,16 @@ if not st.session_state.processing_complete:
 
     with col3:
         st.markdown("#### 3️⃣ Payroll Reports")
+        process_payroll = st.checkbox("Process Payroll", value=st.session_state.process_payroll, key="payroll_checkbox")
+        st.session_state.process_payroll = process_payroll
+
         payroll_files = st.file_uploader(
             "Upload payroll files",
             type=['xlsx', 'xls', 'csv', 'pdf'],
             key="payroll_uploader",
             accept_multiple_files=True,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            disabled=not process_payroll
         )
         if payroll_files:
             st.session_state.payroll_files = payroll_files
@@ -435,16 +467,30 @@ if not st.session_state.processing_complete:
     # Process Button
     st.markdown("---")
 
-    files_ready = (len(st.session_state.visit_files) > 0 and
-                   len(st.session_state.tb_files) > 0 and
-                   len(st.session_state.payroll_files) > 0)
+    # Check if at least one file type is selected AND has files
+    any_selected = (
+        (st.session_state.process_visit and len(st.session_state.visit_files) > 0) or
+        (st.session_state.process_tb and len(st.session_state.tb_files) > 0) or
+        (st.session_state.process_payroll and len(st.session_state.payroll_files) > 0)
+    )
 
-    if files_ready:
-        if st.button("🚀 Process Files with AI", type="primary", use_container_width=True):
+    if any_selected:
+        # Show what will be processed
+        processing_list = []
+        if st.session_state.process_visit and len(st.session_state.visit_files) > 0:
+            processing_list.append(f"Visit Data ({len(st.session_state.visit_files)} files)")
+        if st.session_state.process_tb and len(st.session_state.tb_files) > 0:
+            processing_list.append(f"Trial Balance ({len(st.session_state.tb_files)} files)")
+        if st.session_state.process_payroll and len(st.session_state.payroll_files) > 0:
+            processing_list.append(f"Payroll ({len(st.session_state.payroll_files)} files)")
+
+        st.info(f"📋 Will process: {', '.join(processing_list)}")
+
+        if st.button("🚀 Process Selected Files with AI", type="primary", use_container_width=True):
             process_files()
     else:
-        st.info("👆 Please upload at least one file for each category to continue")
-        st.button("🚀 Process Files with AI", type="primary", use_container_width=True, disabled=True)
+        st.warning("👆 Please check at least one file type and upload files to continue")
+        st.button("🚀 Process Selected Files with AI", type="primary", use_container_width=True, disabled=True)
 
 # Step 3: AI Review Workflow
 if st.session_state.processing_complete and not st.session_state.outputs_generated:
