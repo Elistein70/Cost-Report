@@ -7,6 +7,11 @@ try:
 except ImportError:
     from backend.config_simple import settings
 
+try:
+    from backend.sop_loader import SOPLoader
+except ImportError:
+    from sop_loader import SOPLoader
+
 
 class VisitProcessor:
     """Process visit/schedule 5 data from HHAeXchange or other platforms"""
@@ -19,18 +24,20 @@ class VisitProcessor:
         self.flagged_items = []
         self.questions = []  # Questions for clarification
 
-        # PMPM codes (delete Unique Patient/Visit/Hours per SOP 3.1)
-        self.pmpm_codes = [
+        # Load SOP dynamically from data/sops directory
+        sop_loader = SOPLoader()
+        visit_sop = sop_loader.load_visit_sop()
+
+        # Load patterns from SOP (will use defaults if SOP file doesn't exist)
+        self.pmpm_codes = visit_sop.get('pmpm_codes', [
             '2443', '2444', '2445',
             '8400', '8401', '8402',
             'T1022:UA', 'T1022:UB', 'T1022:UC'
-        ]
+        ])
 
-        # Live-In codes (apply x13 rule)
-        self.live_in_keywords = ['live-in', 'live in', 'livein']
+        self.live_in_keywords = visit_sop.get('live_in_keywords', ['live-in', 'live in', 'livein'])
 
-        # Program type patterns (expanded for better matching)
-        self.program_patterns = {
+        self.program_patterns = visit_sop.get('program_patterns', {
             'HHA': ['hha', 'home health aide', 'aide', 'personal care', 'homemaker',
                    'home care', 'attendant', 'caregiver'],
             'CDPAP': ['cdpap', 'consumer directed', 'consumer-directed', 'cd-pap',
@@ -41,7 +48,16 @@ class VisitProcessor:
             'TBI': ['tbi', 'traumatic brain injury'],
             'Therapy': ['pt', 'ot', 'st', 'physical therapy', 'occupational therapy',
                        'speech therapy', 'therapist'],
-        }
+        })
+
+        self.billing_code_patterns = visit_sop.get('billing_code_patterns', {
+            'G': 'HHA',
+            'S': 'CDPAP',
+            'T': 'Therapy',
+            '992': 'Nursing'
+        })
+
+        self.confidence_threshold = visit_sop.get('confidence_threshold', settings.CONFIDENCE_THRESHOLD)
 
     def process(self) -> List[Dict[str, Any]]:
         """Main processing method"""
@@ -201,7 +217,7 @@ class VisitProcessor:
                 df.at[idx, 'Service_Category'] = 'Standard Visit'
 
             # Flag if confidence is low
-            if confidence < settings.CONFIDENCE_THRESHOLD:
+            if confidence < self.confidence_threshold:
                 self.flagged_items.append({
                     'original_value': description if description else billing_code,
                     'suggested_tag': program_type,
@@ -225,19 +241,20 @@ class VisitProcessor:
 
         # If we have billing code, try to match it
         if billing_code and billing_code.lower() not in ['nan', 'none', '']:
-            billing_code = str(billing_code).strip()
+            billing_code_str = str(billing_code).strip().upper()
 
-            # Check billing code patterns (customize based on your codes)
-            if billing_code.upper().startswith('G'):
-                return 'HHA', 0.85
-            elif billing_code.upper().startswith('S'):
-                return 'CDPAP', 0.85
-            elif billing_code.upper().startswith('T'):
-                return 'Therapy', 0.85
-            elif any(code in billing_code.upper() for code in ['9920', '9921', '9922', '9923', '9924', '9925']):
-                return 'Nursing', 0.9
-            elif any(code in billing_code for code in ['2443', '2444', '2445', '8400', '8401', '8402']):
+            # Check billing code patterns dynamically from SOP
+            for code_prefix, program_type in self.billing_code_patterns.items():
+                if billing_code_str.startswith(code_prefix):
+                    return program_type, 0.85
+
+            # Check for specific PMPM codes
+            if any(code in billing_code for code in ['2443', '2444', '2445', '8400', '8401', '8402']):
                 return 'HHA', 0.9
+
+            # Check for nursing codes
+            if any(code in billing_code_str for code in ['9920', '9921', '9922', '9923', '9924', '9925']):
+                return 'Nursing', 0.9
 
         # If we have either description or code, but no match, it's still uncertain
         if description or billing_code:

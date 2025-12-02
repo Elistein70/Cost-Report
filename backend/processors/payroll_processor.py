@@ -9,6 +9,11 @@ try:
 except ImportError:
     from backend.config_simple import settings
 
+try:
+    from backend.sop_loader import SOPLoader
+except ImportError:
+    from sop_loader import SOPLoader
+
 
 class PayrollProcessor:
     """Process payroll register files (PDF or CSV) following SOP rules"""
@@ -21,34 +26,44 @@ class PayrollProcessor:
         self.flagged_items = []
         self.questions = []  # Questions for user clarification
 
-        # Master payroll allocation guide
-        # Based on actual template analysis - Column E mappings
-        self.paycode_tags = {
-            "Regular": "Base Wages for Hours Worked",
-            "Regular Pay": "Base Wages for Hours Worked",
-            "Reg Pay": "Base Wages for Hours Worked",
-            "Straight Time": "Base Wages for Hours Worked",
+        # Load SOP dynamically from data/sops directory
+        sop_loader = SOPLoader()
 
-            "Overtime": "Overtime Wages",
-            "OT": "Overtime Wages",
-            "OT Pay": "Overtime Wages",
+        # Try to load payroll allocation guide from Excel
+        allocation_guide = sop_loader.load_allocation_guide('payroll_codes')
 
-            "Bonus": "Premium Pay",
-            "Premium": "Premium Pay",
-
-            "Meal": "Other Wages",
-            "Misc": "Other Wages",
-            "Misc Pay": "Other Wages",
-
-            "Holiday": "Holiday Pay",
-            "Holiday Pay": "Holiday Pay",
-
-            "Sick": "Sick Time",
-            "Sick Pay": "Sick Time",
-
-            "Vacation": "Vacation Time",
-            "PTO": "PTO",
-        }
+        if allocation_guide is not None and not allocation_guide.empty:
+            # Load from Excel file
+            self.paycode_tags = {}
+            for _, row in allocation_guide.iterrows():
+                # Assume columns: Original Code, Tag, Notes
+                original = row.iloc[0]
+                tag = row.iloc[1]
+                if pd.notna(original) and pd.notna(tag):
+                    self.paycode_tags[str(original).strip()] = str(tag).strip()
+        else:
+            # Load from markdown SOP or use defaults
+            payroll_sop = sop_loader.load_payroll_sop()
+            self.paycode_tags = payroll_sop.get('paycode_tags', {
+                "Regular": "Base Wages for Hours Worked",
+                "Regular Pay": "Base Wages for Hours Worked",
+                "Reg Pay": "Base Wages for Hours Worked",
+                "Straight Time": "Base Wages for Hours Worked",
+                "Overtime": "Overtime Wages",
+                "OT": "Overtime Wages",
+                "OT Pay": "Overtime Wages",
+                "Bonus": "Premium Pay",
+                "Premium": "Premium Pay",
+                "Meal": "Other Wages",
+                "Misc": "Other Wages",
+                "Misc Pay": "Other Wages",
+                "Holiday": "Holiday Pay",
+                "Holiday Pay": "Holiday Pay",
+                "Sick": "Sick Time",
+                "Sick Pay": "Sick Time",
+                "Vacation": "Vacation Time",
+                "PTO": "PTO",
+            })
 
         # Tax code mappings - Column L
         self.tax_tags = {
@@ -56,16 +71,18 @@ class PayrollProcessor:
             "FICA": "FICA Taxes",
             "MED-R": "FICA Taxes",
             "Medicare": "FICA Taxes",
-
             "FUTA": "Disability/Unemployment/Workers Compensation Taxes",
             "NYSUI": "Disability/Unemployment/Workers Compensation Taxes",
             "SUI": "Disability/Unemployment/Workers Compensation Taxes",
             "NY-MTA1": "Disability/Unemployment/Workers Compensation Taxes",
             "NYCLA": "Disability/Unemployment/Workers Compensation Taxes",
-
             "WC": "Workers Compensation Taxes",
             "Workers Comp": "Workers Compensation Taxes",
         }
+
+        # Load confidence threshold from SOP
+        payroll_sop = sop_loader.load_payroll_sop()
+        self.confidence_threshold = payroll_sop.get('confidence_threshold', settings.CONFIDENCE_THRESHOLD)
 
     def process(self) -> List[Dict[str, Any]]:
         """Main processing method following SOP"""
@@ -214,7 +231,7 @@ class PayrollProcessor:
             df.at[idx, 'Confidence_Paycode'] = paycode_confidence
 
             # Flag if confidence is low
-            if paycode_confidence < settings.CONFIDENCE_THRESHOLD and paycode_tag != 'Unknown':
+            if paycode_confidence < self.confidence_threshold and paycode_tag != 'Unknown':
                 self.flagged_items.append({
                     'original_value': row.get('Code', ''),
                     'suggested_tag': paycode_tag,
@@ -230,7 +247,7 @@ class PayrollProcessor:
                 df.at[idx, 'Tax_Category'] = tax_tag
                 df.at[idx, 'Confidence_Tax'] = tax_confidence
 
-                if tax_confidence < settings.CONFIDENCE_THRESHOLD and tax_tag != 'Unknown':
+                if tax_confidence < self.confidence_threshold and tax_tag != 'Unknown':
                     self.flagged_items.append({
                         'original_value': row['Tax_Code'],
                         'suggested_tag': tax_tag,

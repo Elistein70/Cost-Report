@@ -8,6 +8,11 @@ try:
 except ImportError:
     from backend.config_simple import settings
 
+try:
+    from backend.sop_loader import SOPLoader
+except ImportError:
+    from sop_loader import SOPLoader
+
 
 class TrialBalanceProcessor:
     """Process Trial Balance / General Ledger files"""
@@ -20,25 +25,47 @@ class TrialBalanceProcessor:
         self.flagged_items = []
         self.questions = []  # Questions for clarification
 
-        # Master TB allocation guide (simplified - load from Excel in production)
-        self.expense_allocation_map = {
-            # Account description patterns -> (Program, Category, Router)
-            "Wages": ("All Programs", "Salaries", "Payroll Router"),
-            "Salaries": ("All Programs", "Salaries", "Payroll Router"),
-            "Payroll Tax": ("All Programs", "Payroll Taxes", "Payroll Router"),
-            "FICA": ("All Programs", "Payroll Taxes", "Payroll Router"),
-            "Health Insurance": ("All Programs", "Fringe Benefits", "All Direct Care"),
-            "Workers Comp": ("All Programs", "Workers Compensation", "Payroll Router"),
-            "Rent": ("All Programs", "Rent", "G&A Allocation"),
-            "Utilities": ("All Programs", "Utilities", "G&A Allocation"),
-            "Telephone": ("All Programs", "Telephone", "G&A Allocation"),
-            "Office Supplies": ("All Programs", "Office Supplies", "G&A Allocation"),
-            "Professional Fees": ("All Programs", "Professional Fees", "G&A Allocation"),
-            "Insurance": ("All Programs", "Insurance", "G&A Allocation"),
-            "Depreciation": ("All Programs", "Depreciation", "G&A Allocation"),
-            "Bad Debt": ("All Programs", "Bad Debt", "Revenue Router"),
-            "Wage Parity": ("Program Aide", "Wage Parity", "WP Router"),
-        }
+        # Load SOP dynamically from data/sops directory
+        sop_loader = SOPLoader()
+
+        # Try to load expense allocation guide from Excel
+        allocation_guide = sop_loader.load_allocation_guide('expense_categories')
+
+        if allocation_guide is not None and not allocation_guide.empty:
+            # Load from Excel file
+            # Expect columns: Description Pattern, Program, Category, Router
+            self.expense_allocation_map = {}
+            for _, row in allocation_guide.iterrows():
+                pattern = row.iloc[0]  # Description pattern
+                program = row.iloc[1] if len(row) > 1 else "All Programs"
+                category = row.iloc[2] if len(row) > 2 else "Unknown"
+                router = row.iloc[3] if len(row) > 3 else "G&A Allocation"
+                if pd.notna(pattern):
+                    self.expense_allocation_map[str(pattern).strip()] = (
+                        str(program).strip(),
+                        str(category).strip(),
+                        str(router).strip()
+                    )
+        else:
+            # Load from markdown SOP or use defaults
+            tb_sop = sop_loader.load_trial_balance_sop()
+            self.expense_allocation_map = tb_sop.get('expense_allocation_map', {
+                "Wages": ("All Programs", "Salaries", "Payroll Router"),
+                "Salaries": ("All Programs", "Salaries", "Payroll Router"),
+                "Payroll Tax": ("All Programs", "Payroll Taxes", "Payroll Router"),
+                "FICA": ("All Programs", "Payroll Taxes", "Payroll Router"),
+                "Health Insurance": ("All Programs", "Fringe Benefits", "All Direct Care"),
+                "Workers Comp": ("All Programs", "Workers Compensation", "Payroll Router"),
+                "Rent": ("All Programs", "Rent", "G&A Allocation"),
+                "Utilities": ("All Programs", "Utilities", "G&A Allocation"),
+                "Telephone": ("All Programs", "Telephone", "G&A Allocation"),
+                "Office Supplies": ("All Programs", "Office Supplies", "G&A Allocation"),
+                "Professional Fees": ("All Programs", "Professional Fees", "G&A Allocation"),
+                "Insurance": ("All Programs", "Insurance", "G&A Allocation"),
+                "Depreciation": ("All Programs", "Depreciation", "G&A Allocation"),
+                "Bad Debt": ("All Programs", "Bad Debt", "Revenue Router"),
+                "Wage Parity": ("Program Aide", "Wage Parity", "WP Router"),
+            })
 
         # Color codes for payroll allocation lines (matches template)
         self.payroll_line_colors = {
@@ -47,6 +74,10 @@ class TrialBalanceProcessor:
             "Fringe Benefits": "Orange",
             "Workers Compensation": "Purple",
         }
+
+        # Load confidence threshold from SOP
+        tb_sop = sop_loader.load_trial_balance_sop()
+        self.confidence_threshold = tb_sop.get('confidence_threshold', settings.CONFIDENCE_THRESHOLD)
 
     def process(self) -> List[Dict[str, Any]]:
         """Main processing method"""
@@ -132,7 +163,7 @@ class TrialBalanceProcessor:
             df.at[idx, 'Confidence'] = confidence
 
             # Flag low confidence items
-            if confidence < settings.CONFIDENCE_THRESHOLD:
+            if confidence < self.confidence_threshold:
                 self.flagged_items.append({
                     'original_value': description,
                     'suggested_tag': f"{tag[0]} | {tag[1]} | {tag[2]}",
